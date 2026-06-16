@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.github
+docs/superpowers
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+vitest.config.js
+vitest.config.d.ts
+vite-dev*.log
+npm-debug.log*
+Dockerfile
+README.md
