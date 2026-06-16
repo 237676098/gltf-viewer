@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { CoveragePanel } from './components/CoveragePanel';
 import { DetailPanel } from './components/DetailPanel';
 import { DropZone } from './components/DropZone';
 import { HeaderSummary } from './components/HeaderSummary';
+import { PreviewPane } from './components/PreviewPane';
 import { ReferenceChains } from './components/ReferenceChains';
 import { StatusBanner } from './components/StatusBanner';
 import { analyzeCoverage, type CoverageRow } from './domain/coverageAnalyzer';
@@ -26,6 +27,10 @@ export default function App() {
   const [selectedKey, setSelectedKey] = useState<GltfModuleKey>('asset');
   const [messages, setMessages] = useState<string[]>([]);
   const importRequestIdRef = useRef(0);
+
+  const addWarning = useCallback((message: string) => {
+    setMessages((current) => (current.includes(message) ? current : [...current, message]));
+  }, []);
 
   const coverageRows = useMemo<CoverageRow[]>(() => {
     return asset ? analyzeCoverage(asset.gltf, SUPPORTED_EXTENSIONS) : [];
@@ -96,10 +101,13 @@ export default function App() {
           {relationships ? <ReferenceChains relationships={relationships} /> : null}
         </aside>
         <section className="preview-column" aria-label="3D preview">
-          <div className="preview-standby">
-            <h2>3D Preview</h2>
-            <p>The Three.js preview is added in the next task.</p>
-          </div>
+          <PreviewPane
+            file={asset.file}
+            kind={asset.kind}
+            resources={asset.resources}
+            gltf={asset.gltf}
+            onWarning={addWarning}
+          />
         </section>
       </div>
     </main>

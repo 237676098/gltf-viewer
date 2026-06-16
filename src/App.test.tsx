@@ -29,7 +29,7 @@ describe('App', () => {
     expect(screen.getByText('glTF version')).toBeInTheDocument();
     expect(screen.getByText('2.0')).toBeInTheDocument();
     expect(screen.getByText('3D Preview')).toBeInTheDocument();
-    expect(screen.getByText('The Three.js preview is added in the next task.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reset view' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Asset/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
