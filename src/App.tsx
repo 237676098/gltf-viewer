@@ -11,6 +11,7 @@ import { classifyFiles, createResourceMap, type FileKind } from './domain/fileIn
 import { parseGltfFile } from './domain/gltfParser';
 import type { GltfModuleKey, GltfRoot } from './domain/gltfTypes';
 import { analyzeRelationships } from './domain/relationshipAnalyzer';
+import { findMissingResources } from './domain/resourceDiagnostics';
 
 interface LoadedAsset {
   file: File;
@@ -56,15 +57,17 @@ export default function App() {
         return;
       }
 
+      const resources = createResourceMap(classified.resources);
+
       setAsset({
         file: classified.primary,
         kind: classified.kind,
         gltf: parsed.gltf,
         jsonText: parsed.jsonText,
-        resources: createResourceMap(classified.resources),
+        resources,
       });
       setSelectedKey('asset');
-      setMessages(classified.errors);
+      setMessages([...classified.errors, ...findMissingResources(parsed.gltf, resources, classified.primary)]);
     } catch (error) {
       if (requestId !== importRequestIdRef.current) {
         return;
