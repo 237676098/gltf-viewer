@@ -33,8 +33,16 @@ function getModuleValue(gltf: GltfRoot, key: GltfModuleKey): unknown {
   return gltf[key];
 }
 
-function hasUnsupportedRequiredExtensions(gltf: GltfRoot, supportedExtensions: Set<string>): boolean {
-  return (gltf.extensionsRequired ?? []).some((extension) => !supportedExtensions.has(extension));
+function getStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === 'string')) {
+    return undefined;
+  }
+
+  return [...value];
+}
+
+function getUnsupportedRequiredExtensions(gltf: GltfRoot, supportedExtensions: Set<string>): string[] {
+  return (getStringArray(gltf.extensionsRequired) ?? []).filter((extension) => !supportedExtensions.has(extension));
 }
 
 function buildPresentNote(key: GltfModuleKey, count: number): string {
@@ -64,7 +72,21 @@ export function analyzeCoverage(gltf: GltfRoot, supportedExtensions: Set<string>
       };
     }
 
-    if (definition.key === 'extensionsRequired' && hasUnsupportedRequiredExtensions(gltf, supportedExtensions)) {
+    if (definition.key === 'extensionsRequired' && present && !getStringArray(value)) {
+      return {
+        key: definition.key,
+        label: definition.label,
+        status: 'required-problem',
+        count,
+        explanation: definition.explanation,
+        note: 'The asset declares extensionsRequired with an invalid shape; expected an array of strings.',
+      };
+    }
+
+    const unsupportedRequiredExtensions =
+      definition.key === 'extensionsRequired' ? getUnsupportedRequiredExtensions(gltf, supportedExtensions) : [];
+
+    if (definition.key === 'extensionsRequired' && unsupportedRequiredExtensions.length > 0) {
       return {
         key: definition.key,
         label: definition.label,
@@ -72,7 +94,7 @@ export function analyzeCoverage(gltf: GltfRoot, supportedExtensions: Set<string>
         count,
         explanation: definition.explanation,
         note: 'The asset declares an unsupported required extension, so preview may be incomplete.',
-        values: gltf.extensionsRequired ?? [],
+        values: unsupportedRequiredExtensions,
       };
     }
 
@@ -83,7 +105,7 @@ export function analyzeCoverage(gltf: GltfRoot, supportedExtensions: Set<string>
       count,
       explanation: definition.explanation,
       note: present ? buildPresentNote(definition.key, count) : definition.absenceNote,
-      values: Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? value : undefined,
+      values: getStringArray(value),
     };
   });
 }
