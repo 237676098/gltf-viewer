@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -14,15 +14,19 @@ interface PreviewPaneProps {
 
 const BACKGROUND_COLOR = 0xf7f9fc;
 const EMPTY_BOX = new THREE.Box3();
-
-function hasWebGLSupport(): boolean {
-  if (typeof WebGLRenderingContext === 'undefined') {
-    return false;
-  }
-
-  const canvas = document.createElement('canvas');
-  return Boolean(canvas.getContext('webgl2') ?? canvas.getContext('webgl'));
-}
+const MATERIAL_TEXTURE_KEYS = [
+  'map',
+  'normalMap',
+  'roughnessMap',
+  'metalnessMap',
+  'emissiveMap',
+  'aoMap',
+  'alphaMap',
+  'bumpMap',
+  'displacementMap',
+  'lightMap',
+  'envMap',
+] as const;
 
 function normalizeResourceKey(uri: string): string {
   const decoded = decodeURIComponent(uri).replaceAll('\\', '/');
@@ -34,6 +38,42 @@ function basename(uri: string): string {
   return normalized.slice(normalized.lastIndexOf('/') + 1);
 }
 
+function dirname(uri: string): string {
+  const normalized = normalizeResourceKey(uri);
+  const lastSlash = normalized.lastIndexOf('/');
+  return lastSlash === -1 ? '' : normalized.slice(0, lastSlash);
+}
+
+function resolveResourceUrl(uri: string, primaryDirectory: string, urlsByAlias: Map<string, string>): string {
+  const normalized = normalizeResourceKey(uri);
+  const decoded = decodeURIComponent(uri).replaceAll('\\', '/');
+  const candidates = [
+    primaryDirectory ? normalizeResourceKey(`${primaryDirectory}/${uri}`) : '',
+    normalized,
+    normalizeResourceKey(decoded),
+    basename(normalized),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const url = urlsByAlias.get(candidate);
+    if (url) {
+      return url;
+    }
+  }
+
+  return uri;
+}
+
+function disposeMaterial(material: THREE.Material): void {
+  const materialWithTextures = material as THREE.Material & Partial<Record<(typeof MATERIAL_TEXTURE_KEYS)[number], THREE.Texture>>;
+
+  for (const key of MATERIAL_TEXTURE_KEYS) {
+    materialWithTextures[key]?.dispose();
+  }
+
+  material.dispose();
+}
+
 function disposeObject(object: THREE.Object3D): void {
   object.traverse((child) => {
     const mesh = child as THREE.Mesh;
@@ -42,11 +82,13 @@ function disposeObject(object: THREE.Object3D): void {
 
     geometry?.dispose();
     if (Array.isArray(material)) {
-      material.forEach((entry) => entry.dispose());
+      material.forEach(disposeMaterial);
       return;
     }
 
-    material?.dispose();
+    if (material) {
+      disposeMaterial(material);
+    }
   });
 }
 
@@ -103,6 +145,7 @@ export function PreviewPane({ file, kind, resources, gltf, onWarning }: PreviewP
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const clipsRef = useRef<THREE.AnimationClip[]>([]);
   const activeActionRef = useRef<THREE.AnimationAction | null>(null);
+  const gltfRef = useRef<GLTF | null>(null);
   const gridRef = useRef<THREE.GridHelper | null>(null);
   const boxRef = useRef<THREE.BoxHelper | null>(null);
   const frameRef = useRef<number | null>(null);
@@ -110,6 +153,8 @@ export function PreviewPane({ file, kind, resources, gltf, onWarning }: PreviewP
   const showGridRef = useRef(true);
   const showBackgroundRef = useRef(true);
   const showBoundsRef = useRef(false);
+  const isPlayingRef = useRef(false);
+  const selectedAnimationIndexRef = useRef(0);
 
   const [showGrid, setShowGrid] = useState(true);
   const [showBackground, setShowBackground] = useState(true);
@@ -123,6 +168,23 @@ export function PreviewPane({ file, kind, resources, gltf, onWarning }: PreviewP
   const scenes = useMemo(() => gltf.scenes ?? [], [gltf.scenes]);
   const hasMultipleScenes = scenes.length > 1;
   const hasAnimations = animationNames.length > 0;
+
+  const startSelectedAnimation = useCallback(() => {
+    activeActionRef.current?.stop();
+    activeActionRef.current = null;
+
+    const mixer = mixerRef.current;
+    const clip = clipsRef.current[selectedAnimationIndexRef.current];
+    const root = rootRef.current;
+
+    if (!mixer || !clip || !root || !isPlayingRef.current) {
+      return;
+    }
+
+    const action = mixer.clipAction(clip, root);
+    action.reset().play();
+    activeActionRef.current = action;
+  }, []);
 
   useEffect(() => {
     setSelectedSceneIndex(gltf.scene ?? 0);
@@ -151,25 +213,10 @@ export function PreviewPane({ file, kind, resources, gltf, onWarning }: PreviewP
   }, [showBounds]);
 
   useEffect(() => {
-    activeActionRef.current?.stop();
-    activeActionRef.current = null;
-
-    const mixer = mixerRef.current;
-    const clip = clipsRef.current[selectedAnimationIndex];
-    const root = rootRef.current;
-
-    if (!mixer || !clip || !root || !isPlaying) {
-      return;
-    }
-
-    const action = mixer.clipAction(clip, root);
-    action.reset().play();
-    activeActionRef.current = action;
-
-    return () => {
-      action.stop();
-    };
-  }, [isPlaying, selectedAnimationIndex]);
+    isPlayingRef.current = isPlaying;
+    selectedAnimationIndexRef.current = selectedAnimationIndex;
+    startSelectedAnimation();
+  }, [isPlaying, selectedAnimationIndex, startSelectedAnimation]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -178,7 +225,7 @@ export function PreviewPane({ file, kind, resources, gltf, onWarning }: PreviewP
       return;
     }
 
-    if (!hasWebGLSupport()) {
+    if (typeof WebGLRenderingContext === 'undefined') {
       setStatus('3D preview is unavailable in this environment.');
       return;
     }
@@ -202,6 +249,10 @@ export function PreviewPane({ file, kind, resources, gltf, onWarning }: PreviewP
     }
 
     const primaryUrl = objectUrlFor(file);
+    const primaryPath = 'webkitRelativePath' in file && typeof file.webkitRelativePath === 'string' && file.webkitRelativePath
+      ? file.webkitRelativePath
+      : file.name;
+    const primaryDirectory = dirname(primaryPath);
     for (const [alias, resource] of resources) {
       const url = objectUrlFor(resource);
       urlsByAlias.set(normalizeResourceKey(alias), url);
@@ -249,8 +300,7 @@ export function PreviewPane({ file, kind, resources, gltf, onWarning }: PreviewP
 
     const loader = new GLTFLoader();
     loader.manager.setURLModifier((uri) => {
-      const normalized = normalizeResourceKey(uri);
-      return urlsByAlias.get(normalized) ?? urlsByAlias.get(basename(normalized)) ?? uri;
+      return resolveResourceUrl(uri, primaryDirectory, urlsByAlias);
     });
 
     const mountElement = mount;
@@ -290,6 +340,7 @@ export function PreviewPane({ file, kind, resources, gltf, onWarning }: PreviewP
         const root = loaded.scenes[selectedSceneIndex] ?? loaded.scene;
         scene.add(root);
         rootRef.current = root;
+        gltfRef.current = loaded;
 
         const box = new THREE.BoxHelper(root, 0x2563eb);
         box.visible = showBoundsRef.current;
@@ -309,6 +360,7 @@ export function PreviewPane({ file, kind, resources, gltf, onWarning }: PreviewP
         clipsRef.current = loaded.animations;
         setAnimationNames(loaded.animations.map((clip, index) => clip.name || `Animation ${index + 1}`));
         mixerRef.current = loaded.animations.length > 0 ? new THREE.AnimationMixer(root) : null;
+        startSelectedAnimation();
         setStatus(null);
       },
       undefined,
@@ -343,9 +395,12 @@ export function PreviewPane({ file, kind, resources, gltf, onWarning }: PreviewP
       controls.dispose();
 
       if (rootRef.current) {
-        disposeObject(rootRef.current);
+        scene.remove(rootRef.current);
         rootRef.current = null;
       }
+
+      gltfRef.current?.scenes.forEach(disposeObject);
+      gltfRef.current = null;
 
       if (boxRef.current) {
         scene.remove(boxRef.current);
