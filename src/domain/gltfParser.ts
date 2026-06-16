@@ -56,7 +56,7 @@ async function parseGlb(file: File): Promise<ParsedGltf> {
 
   const declaredLength = view.getUint32(8, true);
 
-  if (declaredLength > buffer.byteLength) {
+  if (declaredLength !== buffer.byteLength) {
     throw new Error('Invalid GLB length.');
   }
 
@@ -65,6 +65,10 @@ async function parseGlb(file: File): Promise<ParsedGltf> {
 
   if (chunkType !== JSON_CHUNK_TYPE) {
     throw new Error('First GLB chunk is not JSON.');
+  }
+
+  if (chunkLength === 0 || chunkLength % 4 !== 0 || 20 + chunkLength > declaredLength) {
+    throw new Error('Invalid GLB JSON chunk length.');
   }
 
   const jsonBytes = new Uint8Array(buffer, 20, chunkLength);

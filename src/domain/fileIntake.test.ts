@@ -5,6 +5,16 @@ function file(name: string, type = ''): File {
   return new File(['content'], name, { type });
 }
 
+function fileWithRelativePath(name: string, webkitRelativePath: string): File {
+  const resource = file(name);
+
+  Object.defineProperty(resource, 'webkitRelativePath', {
+    value: webkitRelativePath,
+  });
+
+  return resource;
+}
+
 describe('fileIntake', () => {
   it('selects a glb primary file', () => {
     const result = classifyFiles([file('model.glb')]);
@@ -36,5 +46,13 @@ describe('fileIntake', () => {
     expect(map.get('textures/baseColor.png')?.name).toBe('textures/baseColor.png');
     expect(map.get('baseColor.png')?.name).toBe('textures/baseColor.png');
     expect(map.get('mesh.bin')?.name).toBe('mesh.bin');
+  });
+
+  it('uses webkit relative paths when available', () => {
+    const resource = fileWithRelativePath('baseColor.png', 'textures/baseColor.png');
+    const map = createResourceMap([resource]);
+
+    expect(map.get('textures/baseColor.png')).toBe(resource);
+    expect(map.get('baseColor.png')).toBe(resource);
   });
 });

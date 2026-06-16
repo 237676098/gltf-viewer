@@ -37,7 +37,8 @@ export function createResourceMap(files: File[]): Map<string, File> {
   const map = new Map<string, File>();
 
   for (const file of files) {
-    const normalized = file.name.replaceAll('\\', '/');
+    const path = file.webkitRelativePath || file.name;
+    const normalized = path.replaceAll('\\', '/');
     const basename = normalized.split('/').at(-1);
 
     map.set(normalized, file);
