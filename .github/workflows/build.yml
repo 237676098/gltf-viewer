@@ -1,0 +1,52 @@
+name: Build and notify Services Manager
+
+on:
+  push:
+    branches:
+      - main
+      - master
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ghcr.io/237676098/gltf-viewer:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Notify Services Manager
+        env:
+          SM_WEBHOOK_URL: https://app.code2.top/api/webhooks/image
+          SM_WEBHOOK_TOKEN: ${{ secrets.SM_WEBHOOK_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          COMMIT_MSG_JSON=$(printf '%s' "$COMMIT_MSG" | jq -Rs .)
+          curl -fsS -X POST "$SM_WEBHOOK_URL" \
+            -H "Authorization: Bearer $SM_WEBHOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @- <<EOF
+          {
+            "image_repo": "ghcr.io/237676098/gltf-viewer",
+            "tag":        "sha-$COMMIT_SHA",
+            "digest":     "$IMAGE_DIGEST",
+            "commit_sha": "$COMMIT_SHA",
+            "commit_msg": $COMMIT_MSG_JSON,
+            "built_at":   "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
