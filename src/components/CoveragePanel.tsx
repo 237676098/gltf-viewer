@@ -42,6 +42,7 @@ export function CoveragePanel({ rows, selectedKey, onSelect }: CoveragePanelProp
             key={row.key}
             className={`coverage-row ${selectedKey === row.key ? 'selected' : ''}`}
             type="button"
+            aria-pressed={selectedKey === row.key}
             onClick={() => onSelect(row.key)}
           >
             <StatusIcon row={row} />

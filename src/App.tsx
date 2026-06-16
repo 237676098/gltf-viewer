@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { CoveragePanel } from './components/CoveragePanel';
 import { DetailPanel } from './components/DetailPanel';
 import { DropZone } from './components/DropZone';
@@ -25,6 +25,7 @@ export default function App() {
   const [asset, setAsset] = useState<LoadedAsset | null>(null);
   const [selectedKey, setSelectedKey] = useState<GltfModuleKey>('asset');
   const [messages, setMessages] = useState<string[]>([]);
+  const importRequestIdRef = useRef(0);
 
   const coverageRows = useMemo<CoverageRow[]>(() => {
     return asset ? analyzeCoverage(asset.gltf, SUPPORTED_EXTENSIONS) : [];
@@ -34,6 +35,8 @@ export default function App() {
   const relationships = useMemo(() => (asset ? analyzeRelationships(asset.gltf) : null), [asset]);
 
   async function handleFiles(files: File[]) {
+    const requestId = importRequestIdRef.current + 1;
+    importRequestIdRef.current = requestId;
     const classified = classifyFiles(files);
 
     if (!classified.primary || classified.kind === 'unsupported') {
@@ -44,6 +47,10 @@ export default function App() {
 
     try {
       const parsed = await parseGltfFile(classified.primary, classified.kind);
+      if (requestId !== importRequestIdRef.current) {
+        return;
+      }
+
       setAsset({
         file: classified.primary,
         kind: classified.kind,
@@ -54,6 +61,10 @@ export default function App() {
       setSelectedKey('asset');
       setMessages(classified.errors);
     } catch (error) {
+      if (requestId !== importRequestIdRef.current) {
+        return;
+      }
+
       setMessages([error instanceof Error ? error.message : 'Unable to parse glTF file.']);
       setAsset(null);
     }
