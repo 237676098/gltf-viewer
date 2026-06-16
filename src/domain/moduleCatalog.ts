@@ -8,7 +8,7 @@ export interface ModuleDefinition {
   expected: 'required' | 'optional';
 }
 
-export const GLTF_MODULES: ModuleDefinition[] = [
+export const GLTF_MODULES: readonly ModuleDefinition[] = [
   { key: 'asset', label: 'Asset', explanation: 'Metadata for the glTF file, including the glTF version and optional generator information.', absenceNote: 'The asset object is expected in valid glTF files.', expected: 'required' },
   { key: 'scenes', label: 'Scenes', explanation: 'Scene definitions group root nodes into renderable scene graphs.', absenceNote: 'A file without scenes has no explicit scene graph to display.', expected: 'optional' },
   { key: 'scene', label: 'Default Scene', explanation: 'The index of the default scene the author expects a viewer to open first.', absenceNote: 'If absent, viewers can choose the first scene when scenes exist.', expected: 'optional' },
