@@ -14,6 +14,7 @@ describe('analyzeRelationships', () => {
         mesh: 'Mesh 0: Triangle',
         primitive: 'Primitive 0',
         material: 'Material 0: Paint',
+        textureSlot: 'pbrMetallicRoughness.baseColorTexture',
         texture: 'Texture 0',
         image: 'Image 0: paint.png',
       },
@@ -51,8 +52,29 @@ describe('analyzeRelationships', () => {
       material: 'Material 0: Paint',
       texture: 'Texture 0',
       image: 'Image 0: paint.png',
+      textureSlot: 'pbrMetallicRoughness.baseColorTexture',
     });
     expect(relationships.sceneChains).toHaveLength(2);
+  });
+
+  it('labels a single non-base-color texture slot', () => {
+    const relationships = analyzeRelationships({
+      ...TEXTURED_GLTF,
+      materials: [{ name: 'Paint', normalTexture: { index: 0 } }],
+    });
+
+    expect(relationships.sceneChains).toEqual([
+      {
+        scene: 'Scene 0: Scene',
+        node: 'Node 0: Root Node',
+        mesh: 'Mesh 0: Triangle',
+        primitive: 'Primitive 0',
+        material: 'Material 0: Paint',
+        textureSlot: 'normalTexture',
+        texture: 'Texture 0',
+        image: 'Image 0: paint.png',
+      },
+    ]);
   });
 
   it('emits a row for each common material texture slot', () => {
@@ -207,6 +229,30 @@ describe('analyzeRelationships', () => {
     ).toContainEqual(
       expect.objectContaining({
         image: 'Image 8 (missing)',
+      }),
+    );
+  });
+
+  it('labels malformed texture slot references as invalid', () => {
+    const missingIndexRelationships = analyzeRelationships({
+      ...TEXTURED_GLTF,
+      materials: [{ name: 'Paint', normalTexture: {} }],
+    });
+    const nonNumericIndexRelationships = analyzeRelationships({
+      ...TEXTURED_GLTF,
+      materials: [{ name: 'Paint', normalTexture: { index: 'bad' } }],
+    });
+
+    expect(missingIndexRelationships.sceneChains).toContainEqual(
+      expect.objectContaining({
+        textureSlot: 'normalTexture',
+        texture: 'Texture normalTexture (invalid)',
+      }),
+    );
+    expect(nonNumericIndexRelationships.sceneChains).toContainEqual(
+      expect.objectContaining({
+        textureSlot: 'normalTexture',
+        texture: 'Texture normalTexture (invalid)',
       }),
     );
   });

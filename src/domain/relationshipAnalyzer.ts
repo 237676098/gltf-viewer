@@ -69,7 +69,13 @@ function textureIndexFrom(textureInfo: unknown): number | undefined {
   return typeof index === 'number' ? index : undefined;
 }
 
-function materialTextureSlots(material: Record<string, unknown>): Array<{ slot: string; textureIndex: number }> {
+interface MaterialTextureSlot {
+  slot: string;
+  textureIndex?: number;
+  invalid?: boolean;
+}
+
+function materialTextureSlots(material: Record<string, unknown>): MaterialTextureSlot[] {
   const pbr = material.pbrMetallicRoughness as Record<string, unknown> | undefined;
   const candidates: Array<[string, unknown]> = [
     ['pbrMetallicRoughness.baseColorTexture', pbr?.baseColorTexture],
@@ -79,10 +85,14 @@ function materialTextureSlots(material: Record<string, unknown>): Array<{ slot: 
     ['emissiveTexture', material.emissiveTexture],
   ];
 
-  return candidates.flatMap(([slot, textureInfo]) => {
+  return candidates.flatMap(([slot, textureInfo]): MaterialTextureSlot[] => {
+    if (textureInfo === undefined) {
+      return [];
+    }
+
     const textureIndex = textureIndexFrom(textureInfo);
 
-    return textureIndex === undefined ? [] : [{ slot, textureIndex }];
+    return textureIndex === undefined ? [{ slot, invalid: true }] : [{ slot, textureIndex }];
   });
 }
 
@@ -193,12 +203,13 @@ export function analyzeRelationships(gltf: GltfRoot): RelationshipReport {
             return;
           }
 
-          textureSlots.forEach(({ slot, textureIndex }) => {
-            const textureLabels = textureImageLabel(gltf, textureIndex);
+          textureSlots.forEach(({ slot, textureIndex, invalid }) => {
+            const textureLabels =
+              invalid || textureIndex === undefined ? { texture: `Texture ${slot} (invalid)` } : textureImageLabel(gltf, textureIndex);
 
             sceneChains.push({
               ...sceneChainBase,
-              textureSlot: textureSlots.length > 1 ? slot : undefined,
+              textureSlot: slot,
               texture: textureLabels.texture,
               image: textureLabels.image,
             });
