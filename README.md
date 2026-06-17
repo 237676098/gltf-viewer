@@ -83,7 +83,7 @@ docker build -t gltf-viewer .
 运行容器：
 
 ```bash
-docker run --rm -p 8080:80 gltf-viewer
+docker run --rm -p 8080:8080 gltf-viewer
 ```
 
 然后访问：
